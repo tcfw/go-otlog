@@ -21,7 +21,7 @@ var TestPass = hex.EncodeToString([]byte(`abcdefhigKLMNOPQRSTUVWXYZ_123456`))
 
 func generateTestKeys() (*rsa.PrivateKey, *x509.Certificate, error) {
 
-	privKey, err := rsa.GenerateKey(rand.Reader, 1024)
+	privKey, _ := rsa.GenerateKey(rand.Reader, 1024)
 
 	serialNumberLimit := new(big.Int).Lsh(big.NewInt(1), 128)
 	serialNumber, err := rand.Int(rand.Reader, serialNumberLimit)
@@ -295,7 +295,7 @@ func TestNewEntryFromIPFS(t *testing.T) {
 	entry, _ := NewEntry(*encryptor, nil)
 	entry.EncryptString(origData)
 
-	head, err := entry.Save(shell, "")
+	head, _ := entry.Save(shell, "")
 	t.Log("Head at ", head, " Data: ", entry.Data)
 	entry.DecryptData()
 

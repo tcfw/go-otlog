@@ -9,7 +9,7 @@ import (
 	"time"
 
 	shell "github.com/ipfs/go-ipfs-shell"
-	encrypt "github.com/tcfw/go-ipfs-otlog/encrypt"
+	encrypt "github.com/tcfw/go-otlog/encrypt"
 )
 
 //Operation The operation transformation being applied (e.g. update/delete)
