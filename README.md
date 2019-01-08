@@ -1,2 +1,2 @@
-# go-ipfs-otlog
+# go-otlog
 OT log storing in IPFS

@@ -1,0 +1,9 @@
+package: github.com/tcfw/go-otlog
+import:
+- package: github.com/ipfs/go-ipfs-shell
+  version: ^1.3.5
+testImport:
+- package: github.com/stretchr/testify
+  version: ^1.3.0
+  subpackages:
+  - assert
