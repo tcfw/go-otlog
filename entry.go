@@ -203,6 +203,10 @@ func (e *Entry) Save(shell *shell.Shell, oldHead string) (string, error) {
 		e.Parent = &Link{Target: oldHead}
 	}
 
+	if !e.isEncrypted {
+		e.Encrypt(e.Data)
+	}
+
 	bytesRaw, err := json.Marshal(e)
 	if err != nil {
 		return "", err
