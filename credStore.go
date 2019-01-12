@@ -7,12 +7,14 @@ import (
 	"errors"
 )
 
+//CredStore stores RSA/encryption keys
 type CredStore struct {
 	pass    string
 	privKey rsa.PrivateKey
 	pubCert x509.Certificate
 }
 
+//NewCredStore constructors of basic cred store
 func NewCredStore(pass string, privKey rsa.PrivateKey, pubCert x509.Certificate) (*CredStore, error) {
 	if pubCert.PublicKey.(*rsa.PublicKey).N.Cmp(privKey.PublicKey.N) != 0 || privKey.PublicKey.E != pubCert.PublicKey.(*rsa.PublicKey).E {
 		return nil, errors.New("Given public certificate does not match given private key")

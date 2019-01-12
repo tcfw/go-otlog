@@ -69,21 +69,21 @@ func TestNewEntry(t *testing.T) {
 		t.Fatalf("Failed to create encryptor: %s", err.Error())
 	}
 
-	_, err = NewEntry(*encryptor, nil)
+	_, err = NewEntry(nil, *encryptor, &IpfsStore{})
 	if err != nil {
 		t.Error(err)
 	}
 
 	//Empty CredStore
 	encryptor = &CredStore{}
-	_, err = NewEntry(*encryptor, nil)
+	_, err = NewEntry(nil, *encryptor, &IpfsStore{})
 	if err == nil {
 		t.Error("Must pick up that no pass exists")
 	}
 }
 
 func TestEncryptString(t *testing.T) {
-	entry, _ := NewEntry(*generateTestCredStore(), nil)
+	entry, _ := NewEntry(nil, *generateTestCredStore(), &IpfsStore{})
 
 	err := entry.EncryptString("test")
 	if err != nil {
@@ -103,7 +103,7 @@ func TestEncryptString(t *testing.T) {
 func TestDecryptString(t *testing.T) {
 	origData := `test`
 
-	entry, _ := NewEntry(*generateTestCredStore(), nil)
+	entry, _ := NewEntry(nil, *generateTestCredStore(), &IpfsStore{})
 
 	err := entry.Encrypt(origData)
 	if err != nil {
@@ -129,7 +129,7 @@ func TestDecryptString(t *testing.T) {
 func TestInvalidSigs(t *testing.T) {
 	origData := `test`
 
-	entry, _ := NewEntry(*generateTestCredStore(), nil)
+	entry, _ := NewEntry(nil, *generateTestCredStore(), &IpfsStore{})
 
 	invalids := []struct {
 		Sig  string
@@ -158,7 +158,7 @@ func TestInvalidSigs(t *testing.T) {
 
 func TestInvalidPubCerts(t *testing.T) {
 	origData := `test`
-	entry, _ := NewEntry(*generateTestCredStore(), nil)
+	entry, _ := NewEntry(nil, *generateTestCredStore(), &IpfsStore{})
 
 	invalids := []struct {
 		Cert string
@@ -187,7 +187,7 @@ func TestInvalidPubCerts(t *testing.T) {
 
 func TestInvalidEncData(t *testing.T) {
 	origData := `test`
-	entry, _ := NewEntry(*generateTestCredStore(), nil)
+	entry, _ := NewEntry(nil, *generateTestCredStore(), &IpfsStore{})
 
 	invalids := []struct {
 		Data string
@@ -216,7 +216,7 @@ func TestInvalidEncData(t *testing.T) {
 
 func TestDataToString(t *testing.T) {
 	origData := `test`
-	entry, _ := NewEntry(*generateTestCredStore(), nil)
+	entry, _ := NewEntry(nil, *generateTestCredStore(), &IpfsStore{})
 
 	err := entry.EncryptString(origData)
 	if err != nil {
@@ -239,7 +239,7 @@ func TestEncryptStruct(t *testing.T) {
 		Name: "Test",
 	}
 
-	entry, _ := NewEntry(*generateTestCredStore(), nil)
+	entry, _ := NewEntry(nil, *generateTestCredStore(), &IpfsStore{})
 	err := entry.EncryptFromJSON(basicStruct)
 	if err != nil {
 		t.Error(err)
@@ -263,7 +263,7 @@ func TestEncryptStruct(t *testing.T) {
 func TestIPFSSave(t *testing.T) {
 	shell := ipfsShell.NewShell("localhost:5001")
 	origData := `test`
-	entry, _ := NewEntry(*generateTestCredStore(), nil)
+	entry, _ := NewEntry(nil, *generateTestCredStore(), &IpfsStore{Shell: shell})
 
 	nTime, err := time.Parse(time.RFC3339, "2006-01-02T15:04:05+07:00")
 	if err != nil {
@@ -278,7 +278,7 @@ func TestIPFSSave(t *testing.T) {
 
 	expectedHead := "zdpuB3arcBMi4j7qwwe1G2XMcoQy3tnc5ZYCRZEXzyxDJnAQ7"
 
-	head, err := entry.Save(shell, "")
+	head, err := entry.Save("")
 	if err != nil {
 		t.Error(err)
 	}
@@ -292,17 +292,17 @@ func TestNewEntryFromIPFS(t *testing.T) {
 
 	shell := ipfsShell.NewShell("localhost:5001")
 	origData := `test`
-	entry, _ := NewEntry(*encryptor, nil)
+	entry, _ := NewEntry(nil, *encryptor, &IpfsStore{Shell: shell})
 	entry.EncryptString(origData)
 
-	head, _ := entry.Save(shell, "")
+	head, _ := entry.Save("")
 	t.Log("Head at ", head, " Data: ", entry.Data)
 	entry.DecryptData()
 
-	ipfsEntry, err := NewEntryFromIPFS(shell, *encryptor, head)
+	ipfsEntry, err := NewEntryFromStorage(&IpfsStore{Shell: shell}, *encryptor, head)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	assert.EqualValues(t, entry, ipfsEntry)
+	assert.EqualValues(t, entry.Data, ipfsEntry.Data)
 }

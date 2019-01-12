@@ -8,7 +8,6 @@ import (
 	"errors"
 	"time"
 
-	shell "github.com/ipfs/go-ipfs-shell"
 	encrypt "github.com/tcfw/go-otlog/encrypt"
 )
 
@@ -31,6 +30,7 @@ type Link struct {
 //Entry holds the DAG struct to go to IPFS
 type Entry struct {
 	credStore   CredStore
+	dataStore   StorageEngine
 	isEncrypted bool
 
 	Time       time.Time `json:"t"`
@@ -44,13 +44,14 @@ type Entry struct {
 }
 
 //NewEntry creates a new entry with populated properties
-func NewEntry(credStore CredStore, parent *Link) (*Entry, error) {
+func NewEntry(parent *Link, credStore CredStore, dataStore StorageEngine) (*Entry, error) {
 	if credStore.getPass() == "" {
 		return nil, errors.New("CredStore must be set with a password")
 	}
 
 	return &Entry{
 		credStore: credStore,
+		dataStore: dataStore,
 		Time:      time.Now().Round(0),
 		CrytpoAlg: encrypt.AlgoAES256SHA256,
 		Parent:    parent,
@@ -58,10 +59,10 @@ func NewEntry(credStore CredStore, parent *Link) (*Entry, error) {
 	}, nil
 }
 
-//NewEntryFromIPFS gets an entry via IPFS DAG
-func NewEntryFromIPFS(shell *shell.Shell, credStore CredStore, head string) (*Entry, error) {
+//NewEntryFromStorage gets an entry via storage ref
+func NewEntryFromStorage(storage StorageEngine, credStore CredStore, head string) (*Entry, error) {
 	entry := &Entry{credStore: credStore, isEncrypted: true}
-	err := shell.DagGet(head, entry)
+	entry, err := storage.Get(entry, head)
 	if err != nil {
 		return nil, err
 	}
@@ -74,8 +75,8 @@ func NewEntryFromIPFS(shell *shell.Shell, credStore CredStore, head string) (*En
 	return entry, nil
 }
 
-func (e *Entry) getParent(shell *shell.Shell) (*Entry, error) {
-	return NewEntryFromIPFS(shell, e.credStore, e.Parent.Target)
+func (e *Entry) parent() (*Entry, error) {
+	return NewEntryFromStorage(e.dataStore, e.credStore, e.Parent.Target)
 }
 
 //Encrypt alias for EncryptString
@@ -197,20 +198,15 @@ func (e *Entry) encryptBytes(data []byte) error {
 	return nil
 }
 
-//Save adds the entry to IPFS as is
-func (e *Entry) Save(shell *shell.Shell, oldHead string) (string, error) {
-	if e.Parent != nil && oldHead != "" {
-		e.Parent = &Link{Target: oldHead}
+//Save adds the entry to storage
+func (e *Entry) Save(previous string) (string, error) {
+	if e.Parent != nil && previous != "" {
+		e.Parent = &Link{Target: previous}
 	}
 
 	if !e.isEncrypted {
 		e.Encrypt(e.Data)
 	}
 
-	bytesRaw, err := json.Marshal(e)
-	if err != nil {
-		return "", err
-	}
-
-	return shell.DagPut(bytesRaw, "json", "cbor")
+	return e.dataStore.Save(e)
 }
