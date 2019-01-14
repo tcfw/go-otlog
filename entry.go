@@ -20,6 +20,9 @@ const (
 
 	//OpDel the delete operation
 	OpDel Operation = "del"
+
+	//OpMerge allows for merge operations between other logs
+	OpMerge Operation = "merg"
 )
 
 //Link provies DAG links/Merkle leaf nodes for IPFS
@@ -40,7 +43,7 @@ type Entry struct {
 	Snapshot   *Link     `json:"sn,omitempty"`
 	Data       string    `json:"d"`
 	Operation  Operation `json:"o"`
-	Parent     *Link     `json:"p,omitempty"`
+	Parent     []*Link   `json:"p,omitempty"`
 }
 
 //NewEntry creates a new entry with populated properties
@@ -54,7 +57,7 @@ func NewEntry(parent *Link, credStore CredStore, dataStore StorageEngine) (*Entr
 		dataStore: dataStore,
 		Time:      time.Now().Round(0),
 		CrytpoAlg: encrypt.AlgoAES256SHA256,
-		Parent:    parent,
+		Parent:    []*Link{parent},
 		Operation: OpUpSert,
 	}, nil
 }
@@ -76,7 +79,10 @@ func NewEntryFromStorage(storage StorageEngine, credStore CredStore, head string
 }
 
 func (e *Entry) parent() (*Entry, error) {
-	return NewEntryFromStorage(e.dataStore, e.credStore, e.Parent.Target)
+	if len(e.Parent) >= 1 {
+		return NewEntryFromStorage(e.dataStore, e.credStore, e.Parent[0].Target)
+	}
+	return nil, nil
 }
 
 //Encrypt alias for EncryptString
@@ -201,7 +207,7 @@ func (e *Entry) encryptBytes(data []byte) error {
 //Save adds the entry to storage
 func (e *Entry) Save(previous string) (string, error) {
 	if e.Parent != nil && previous != "" {
-		e.Parent = &Link{Target: previous}
+		e.Parent = []*Link{{Target: previous}}
 	}
 
 	if !e.isEncrypted {
@@ -209,4 +215,17 @@ func (e *Entry) Save(previous string) (string, error) {
 	}
 
 	return e.dataStore.Save(e)
+}
+
+//Merge merges 2 entry chains into a single chain
+func (e *Entry) Merge(previous *Entry) (*Entry, error) {
+	/*
+		# Find common base
+		# Collate entries between logs into list sorted by time (diff)
+		# Walk through changes (priorities delete over upsert)
+		# Create snapshot of records
+		# Create new entry as merge refing snapshot and both parents
+	*/
+
+	return nil, errors.New("not implemented yet")
 }

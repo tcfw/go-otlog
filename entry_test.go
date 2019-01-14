@@ -276,7 +276,7 @@ func TestIPFSSave(t *testing.T) {
 	entry.PublicCert = ""
 	entry.Signature = ""
 
-	expectedHead := "zdpuB3arcBMi4j7qwwe1G2XMcoQy3tnc5ZYCRZEXzyxDJnAQ7"
+	expectedHead := "zdpuAm3x36YSdvvjGJmfuhoUU781vdC9SR2fgBKe11AMBKNtj"
 
 	head, err := entry.Save("")
 	if err != nil {
