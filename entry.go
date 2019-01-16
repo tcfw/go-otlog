@@ -235,7 +235,7 @@ func (e *Entry) Save(previous string) (string, error) {
 }
 
 //Merge merges 2 entry chains into a single chain
-func (e *Entry) Merge(sibling *Entry) (*Entry, error) {
+func (e *Entry) Merge(sibling *Entry) (*Entry, []Record, error) {
 	/*
 		# Find common base
 		# Collate entries between logs into list sorted by time (diff)
@@ -246,34 +246,36 @@ func (e *Entry) Merge(sibling *Entry) (*Entry, error) {
 
 	eRef, err := e.Save("")
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	pRef, err := sibling.Save("")
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	_, _, mapping, err := e.findCommonAncestor(sibling)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	// fmt.Printf("%v\nr: %s\nm: %v\n", base, *ref, mapping)
 
 	originalSnapshot, err := RecoverSnapshot(e.Snapshot.Target, e.dataStore)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	records := &Records{}
 	err = originalSnapshot.GetRecords(e.credStore, records)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	mergeEntry, err := NewEntry(nil, e.credStore, e.dataStore)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
+
+	mergedRecords := []Record{}
 
 	if mapping == nil {
 		//Assume simple 1 depth merge
@@ -282,28 +284,29 @@ func (e *Entry) Merge(sibling *Entry) (*Entry, error) {
 
 		sibDiff, err := sibling.DataToStruct(&EntryDiff{})
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		sibDiffT := sibDiff.(*EntryDiff)
 
 		records.Records, err = e.applyDiff(*sibDiffT, records.Records)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
+		mergedRecords = records.Records
 	} else {
 		//Multi diff path
 	}
 
 	snapshotRef, err := NewSnapshot(e.credStore, records, e.dataStore)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	mergeEntry.Operation = OpMerge
 	mergeEntry.Snapshot = snapshotRef
-	mergeEntry.Parent = []*Link{&Link{eRef}, &Link{pRef}}
+	mergeEntry.Parent = []*Link{{eRef}, {pRef}}
 
-	return mergeEntry, nil
+	return mergeEntry, mergedRecords, nil
 }
 
 func (e *Entry) applyDiff(diff EntryDiff, records []Record) ([]Record, error) {

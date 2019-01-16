@@ -412,11 +412,11 @@ func TestFind2JumpAncestor(t *testing.T) {
 	entry2Ref, _ := entry2.Save("")
 
 	entry4, _ := NewEntry(nil, credStore, memStore)
-	entry4.Parent = []*Link{&Link{entry1Ref}, &Link{entry2Ref}}
+	entry4.Parent = []*Link{{entry1Ref}, {entry2Ref}}
 	entry4Ref, _ := entry4.Save("")
 
 	entry5, _ := NewEntry(nil, credStore, memStore)
-	entry5.Parent = []*Link{&Link{entry4Ref}}
+	entry5.Parent = []*Link{{entry4Ref}}
 	entry5Ref, _ := entry5.Save("")
 
 	t.Logf("\nroot: %s\n1: %s\n2: %s\n3: %s\n4: %s\n5: %s\n", rootRef, entry1Ref, entry2Ref, entry3Ref, entry4Ref, entry5Ref)
@@ -474,7 +474,7 @@ func TestSimpleMerge(t *testing.T) {
 	entry2.EncryptFromJSON(entry2Diff)
 	entry2Ref, _ := entry2.Save("")
 
-	merge, err := entry1.Merge(entry2)
+	merge, mRecs, err := entry1.Merge(entry2)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -486,18 +486,11 @@ func TestSimpleMerge(t *testing.T) {
 	for k := range parents {
 		pRefs = append(pRefs, k)
 	}
-	mSnap, err := RecoverSnapshot(merge.Snapshot.Target, memStore)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	mRecs := &Records{}
-	mSnap.GetRecords(*credStore, mRecs)
 
 	expectedRefs := []string{entry1Ref, entry2Ref}
 	expectedRecords := []Record{*rec1, *rec2}
 
 	assert.EqualValues(t, expectedRefs, pRefs)
 	assert.Equal(t, OpMerge, merge.Operation)
-	assert.EqualValues(t, mRecs.Records, expectedRecords)
+	assert.EqualValues(t, mRecs, expectedRecords)
 }

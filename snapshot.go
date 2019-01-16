@@ -87,6 +87,9 @@ func NewSnapshot(creds CredStore, records interface{}, storage StorageEngine) (*
 	}
 
 	sign, err := encrypt.Sign(recordBytes, *creds.getPrivKey())
+	if err != nil {
+		return nil, err
+	}
 
 	snapshot := &Snapshot{
 		PubCert:   pubCert,
