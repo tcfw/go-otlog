@@ -8,6 +8,8 @@ import (
 	"errors"
 	"time"
 
+	"github.com/google/uuid"
+
 	encrypt "github.com/tcfw/go-otlog/encrypt"
 )
 
@@ -23,6 +25,9 @@ const (
 
 	//OpMerge allows for merge operations between other logs
 	OpMerge Operation = "merg"
+
+	//OpBase used only for root nodes
+	OpBase Operation = "base"
 )
 
 //Link provies DAG links/Merkle leaf nodes for IPFS
@@ -37,6 +42,7 @@ type Entry struct {
 	isEncrypted bool
 
 	Time       time.Time `json:"t"`
+	ID         uuid.UUID `json:"id"`
 	CrytpoAlg  string    `json:"c"`
 	PublicCert string    `json:"pk"`
 	Signature  string    `json:"s"`
@@ -56,6 +62,7 @@ func NewEntry(parent *Link, credStore CredStore, dataStore StorageEngine) (*Entr
 		credStore: credStore,
 		dataStore: dataStore,
 		Time:      time.Now().Round(0),
+		ID:        uuid.New(),
 		CrytpoAlg: encrypt.AlgoAES256SHA256,
 		Parent:    []*Link{parent},
 		Operation: OpUpSert,
@@ -64,7 +71,7 @@ func NewEntry(parent *Link, credStore CredStore, dataStore StorageEngine) (*Entr
 
 //NewEntryFromStorage gets an entry via storage ref
 func NewEntryFromStorage(storage StorageEngine, credStore CredStore, head string) (*Entry, error) {
-	entry := &Entry{credStore: credStore, isEncrypted: true}
+	entry := &Entry{credStore: credStore, dataStore: storage, isEncrypted: true}
 	entry, err := storage.Get(entry, head)
 	if err != nil {
 		return nil, err
@@ -78,11 +85,21 @@ func NewEntryFromStorage(storage StorageEngine, credStore CredStore, head string
 	return entry, nil
 }
 
-func (e *Entry) parent() (*Entry, error) {
-	if len(e.Parent) >= 1 {
-		return NewEntryFromStorage(e.dataStore, e.credStore, e.Parent[0].Target)
+//Parents provides a map the entries parent(s) ~ multiple for merges
+func (e *Entry) Parents() (map[string]*Entry, error) {
+	parents := map[string]*Entry{}
+	if e.Parent != nil && len(e.Parent) > 0 {
+		for _, parent := range e.Parent {
+			if parent != nil {
+				entry, err := NewEntryFromStorage(e.dataStore, e.credStore, parent.Target)
+				if err != nil {
+					return nil, err
+				}
+				parents[parent.Target] = entry
+			}
+		}
 	}
-	return nil, nil
+	return parents, nil
 }
 
 //Encrypt alias for EncryptString
@@ -206,7 +223,7 @@ func (e *Entry) encryptBytes(data []byte) error {
 
 //Save adds the entry to storage
 func (e *Entry) Save(previous string) (string, error) {
-	if e.Parent != nil && previous != "" {
+	if len(e.Parent) == 0 && e.Parent[0] != nil && previous != "" {
 		e.Parent = []*Link{{Target: previous}}
 	}
 
@@ -218,7 +235,7 @@ func (e *Entry) Save(previous string) (string, error) {
 }
 
 //Merge merges 2 entry chains into a single chain
-func (e *Entry) Merge(previous *Entry) (*Entry, error) {
+func (e *Entry) Merge(sibling *Entry) (*Entry, error) {
 	/*
 		# Find common base
 		# Collate entries between logs into list sorted by time (diff)
@@ -227,5 +244,180 @@ func (e *Entry) Merge(previous *Entry) (*Entry, error) {
 		# Create new entry as merge refing snapshot and both parents
 	*/
 
-	return nil, errors.New("not implemented yet")
+	eRef, err := e.Save("")
+	if err != nil {
+		return nil, err
+	}
+	pRef, err := sibling.Save("")
+	if err != nil {
+		return nil, err
+	}
+
+	_, _, mapping, err := e.findCommonAncestor(sibling)
+	if err != nil {
+		return nil, err
+	}
+
+	// fmt.Printf("%v\nr: %s\nm: %v\n", base, *ref, mapping)
+
+	originalSnapshot, err := RecoverSnapshot(e.Snapshot.Target, e.dataStore)
+	if err != nil {
+		return nil, err
+	}
+	records := &Records{}
+	err = originalSnapshot.GetRecords(e.credStore, records)
+	if err != nil {
+		return nil, err
+	}
+
+	mergeEntry, err := NewEntry(nil, e.credStore, e.dataStore)
+	if err != nil {
+		return nil, err
+	}
+
+	if mapping == nil {
+		//Assume simple 1 depth merge
+		//Use ours ~ playforward diff
+		//Create new snap
+
+		sibDiff, err := sibling.DataToStruct(&EntryDiff{})
+		if err != nil {
+			return nil, err
+		}
+		sibDiffT := sibDiff.(*EntryDiff)
+
+		records.Records, err = e.applyDiff(*sibDiffT, records.Records)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		//Multi diff path
+	}
+
+	snapshotRef, err := NewSnapshot(e.credStore, records, e.dataStore)
+	if err != nil {
+		return nil, err
+	}
+
+	mergeEntry.Operation = OpMerge
+	mergeEntry.Snapshot = snapshotRef
+	mergeEntry.Parent = []*Link{&Link{eRef}, &Link{pRef}}
+
+	return mergeEntry, nil
+}
+
+func (e *Entry) applyDiff(diff EntryDiff, records []Record) ([]Record, error) {
+	switch diff.Op {
+	case OpUpSert:
+		return append(records, diff.Record), nil
+	case OpDel:
+		index := -1
+		for i, rec := range records {
+			if rec.ID == diff.Record.ID {
+				index = i
+				break
+			}
+		}
+		records[index] = records[len(records)-1]
+		return records[:len(records)-1], nil
+	}
+	return []Record{}, nil
+}
+
+type lcaMapping struct {
+	ChildrenA map[string]map[string]bool
+	ChildrenB map[string]map[string]bool
+	Depths    map[string]int
+}
+
+func (e *Entry) findCommonAncestor(sibling *Entry) (*Entry, *string, *lcaMapping, error) {
+	if len(e.Parent) == 0 {
+		return nil, nil, nil, nil
+	}
+
+	// Test 1 depth
+	eParents, err := e.Parents()
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	sParents, err := sibling.Parents()
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	for eTarget, eParent := range eParents {
+		for sTarget := range sParents {
+			if eTarget == sTarget {
+				return eParent, &eTarget, nil, nil
+			}
+		}
+	}
+
+	//LCA
+	childrenE, depth, err := e.dfs(map[string]map[string]bool{}, map[string]int{}, 0)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	childrenS, depth, err := sibling.dfs(map[string]map[string]bool{}, depth, 0)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+
+	commons := map[string]int{}
+
+	for ref, nodeDepth := range depth {
+		_, okE := childrenE[ref]
+		_, okS := childrenS[ref]
+		if okE && okS {
+			commons[ref] = nodeDepth
+		}
+	}
+
+	var lca string
+
+	curDepth := MAXDEPTH
+	for ref, nDepth := range commons {
+		if nDepth < curDepth {
+			lca = ref
+		}
+	}
+
+	lcaNode, err := NewEntryFromStorage(e.dataStore, e.credStore, lca)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+
+	return lcaNode, &lca, &lcaMapping{childrenE, childrenS, depth}, nil
+
+}
+
+//MAXDEPTH is the limit of the depth of the search
+const MAXDEPTH = 100000
+
+func (e *Entry) dfs(dfsMap map[string]map[string]bool, depth map[string]int, curDepth int) (map[string]map[string]bool, map[string]int, error) {
+	ref, _ := e.Save("")
+	parents, err := e.Parents()
+	if err != nil {
+		return nil, nil, err
+	}
+
+	curDepth++
+	if curDepth > MAXDEPTH {
+		return dfsMap, depth, nil
+	}
+
+	for pRef, parent := range parents {
+		dfsMap, depth, err = parent.dfs(dfsMap, depth, curDepth)
+		if err != nil {
+			return nil, nil, err
+		}
+
+		if _, ok := dfsMap[pRef]; !ok {
+			dfsMap[pRef] = map[string]bool{}
+		}
+		dfsMap[pRef][ref] = true
+		if refDef, ok := depth[pRef]; !ok || curDepth > refDef {
+			depth[pRef] = curDepth
+		}
+	}
+	return dfsMap, depth, nil
 }
