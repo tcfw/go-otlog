@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/google/uuid"
@@ -253,13 +254,14 @@ func (e *Entry) Merge(sibling *Entry) (*Entry, []Record, error) {
 		return nil, nil, err
 	}
 
-	_, _, mapping, err := e.findCommonAncestor(sibling)
+	commonAncestor, _, mapping, err := e.findCommonAncestor(sibling)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	// fmt.Printf("%v\nr: %s\nm: %v\n", base, *ref, mapping)
-
+	if e.Snapshot == nil {
+		return nil, nil, errors.New("no snapshot attached")
+	}
 	originalSnapshot, err := RecoverSnapshot(e.Snapshot.Target, e.dataStore)
 	if err != nil {
 		return nil, nil, err
@@ -295,6 +297,13 @@ func (e *Entry) Merge(sibling *Entry) (*Entry, []Record, error) {
 		mergedRecords = records.Records
 	} else {
 		//Multi diff path
+
+		// baseRef := commonAncestor.Snapshot.Target
+		// leftRef := e.Snapshot.Target
+		// rightRef := sibling.Snapshot.Target
+
+		//3wMerge(baseRef,leftRef,rightRef)
+		fmt.Printf("%v\n", commonAncestor.Snapshot.Target)
 	}
 
 	snapshotRef, err := NewSnapshot(e.credStore, records, e.dataStore)
@@ -321,7 +330,7 @@ func (e *Entry) applyDiff(diff EntryDiff, records []Record) ([]Record, error) {
 				break
 			}
 		}
-		records[index] = records[len(records)-1]
+		records[index] = Record{records[index].ID, []byte{}, true}
 		return records[:len(records)-1], nil
 	}
 	return []Record{}, nil
