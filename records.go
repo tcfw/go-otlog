@@ -22,6 +22,7 @@ func (r *Records) Snapshot(creds CredStore) (*Link, error) {
 
 //Record ~indivudualrecords
 type Record struct {
-	ID  uuid.UUID       `json:"_id"`
-	Raw json.RawMessage `json:"d"`
+	ID      uuid.UUID       `json:"_id"`
+	Raw     json.RawMessage `json:"d,omitempty"`
+	Deleted bool            `json:"del"`
 }
