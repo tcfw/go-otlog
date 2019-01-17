@@ -457,9 +457,9 @@ func TestSimpleMerge(t *testing.T) {
 	entry1, _ := NewEntry(&Link{rootRef}, *credStore, memStore)
 	entry1.Operation = OpUpSert
 	rec1 := &Record{uuid.Nil, []byte(`"Test"`)}
-	entry1Recs := &Records{Records: []Record{*rec1}}
+	entry1Recs := &Records{Records: []Record{*rec1}, store: memStore}
 	entry1Diff := &EntryDiff{OpUpSert, *rec1}
-	entry1Snap, _ := NewSnapshot(*credStore, entry1Recs, memStore)
+	entry1Snap, _ := entry1Recs.Snapshot(*credStore)
 	entry1.Snapshot = entry1Snap
 	entry1.EncryptFromJSON(entry1Diff)
 	entry1Ref, _ := entry1.Save("")
@@ -467,9 +467,9 @@ func TestSimpleMerge(t *testing.T) {
 	entry2, _ := NewEntry(&Link{rootRef}, *credStore, memStore)
 	entry2.Operation = OpUpSert
 	rec2 := &Record{uuid.Nil, []byte(`"Example"`)}
-	entry2Recs := &Records{Records: []Record{*rec2}}
+	entry2Recs := &Records{Records: []Record{*rec2}, store: memStore}
 	entry2Diff := &EntryDiff{OpUpSert, *rec2}
-	entry2Snap, _ := NewSnapshot(*credStore, entry2Recs, memStore)
+	entry2Snap, _ := entry2Recs.Snapshot(*credStore)
 	entry2.Snapshot = entry2Snap
 	entry2.EncryptFromJSON(entry2Diff)
 	entry2Ref, _ := entry2.Save("")

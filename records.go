@@ -2,7 +2,6 @@ package otlog
 
 import (
 	"encoding/json"
-	"errors"
 
 	"github.com/google/uuid"
 )
@@ -17,8 +16,8 @@ type Records struct {
 }
 
 //Snapshot saves the records to storage
-func (r *Records) Snapshot(creds CredStore) (string, error) {
-	return "", errors.New("not implemented yet")
+func (r *Records) Snapshot(creds CredStore) (*Link, error) {
+	return NewSnapshot(creds, r, r.store)
 }
 
 //Record ~indivudualrecords
