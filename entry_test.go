@@ -421,12 +421,13 @@ func TestFind2JumpAncestor(t *testing.T) {
 
 	t.Logf("\nroot: %s\n1: %s\n2: %s\n3: %s\n4: %s\n5: %s\n", rootRef, entry1Ref, entry2Ref, entry3Ref, entry4Ref, entry5Ref)
 
-	_, estRootRef, _, _ := entry3.findCommonAncestor(entry5)
+	_, estRootRef, mappings, _ := entry3.findCommonAncestor(entry5)
 
 	if estRootRef == nil {
 		t.Fatal("No ancestor found, but should have been ", rootRef)
 	}
 
+	assert.NotNil(t, mappings)
 	assert.Equal(t, entry1Ref, *estRootRef)
 }
 
@@ -437,14 +438,14 @@ type basicTestRecord struct {
 
 func TestSimpleMerge(t *testing.T) {
 	/*
-	   	Test:
-
-	   		root
-	   		 /\
-	   		/  \
-	  entry 1  entry 2
-
-	   	LCA(entry1, entry2): root
+			Test:
+				   root
+			   	    /\
+			       /  \
+		  (U)entry 1  (U)entry 2
+				.    .
+				.  .
+			merge
 	*/
 
 	memStore := NewMemStore()
@@ -456,7 +457,7 @@ func TestSimpleMerge(t *testing.T) {
 
 	entry1, _ := NewEntry(&Link{rootRef}, *credStore, memStore)
 	entry1.Operation = OpUpSert
-	rec1 := &Record{uuid.Nil, []byte(`"Test"`)}
+	rec1 := &Record{uuid.New(), []byte(`"Test"`), false}
 	entry1Recs := &Records{Records: []Record{*rec1}, store: memStore}
 	entry1Diff := &EntryDiff{OpUpSert, *rec1}
 	entry1Snap, _ := entry1Recs.Snapshot(*credStore)
@@ -466,7 +467,7 @@ func TestSimpleMerge(t *testing.T) {
 
 	entry2, _ := NewEntry(&Link{rootRef}, *credStore, memStore)
 	entry2.Operation = OpUpSert
-	rec2 := &Record{uuid.Nil, []byte(`"Example"`)}
+	rec2 := &Record{uuid.New(), []byte(`"Example"`), false}
 	entry2Recs := &Records{Records: []Record{*rec2}, store: memStore}
 	entry2Diff := &EntryDiff{OpUpSert, *rec2}
 	entry2Snap, _ := entry2Recs.Snapshot(*credStore)
@@ -492,5 +493,92 @@ func TestSimpleMerge(t *testing.T) {
 
 	assert.EqualValues(t, expectedRefs, pRefs)
 	assert.Equal(t, OpMerge, merge.Operation)
-	assert.EqualValues(t, mRecs, expectedRecords)
+	assert.EqualValues(t, expectedRecords, mRecs)
+}
+
+func Test2DeepMerge(t *testing.T) {
+	/*
+		Test:
+
+			    root
+			    / \
+			   /   \
+		(U)entry 1  (U)entry 2
+			|    \	    |
+			|	  \	    |
+			|	   \ 	|
+		(D)entry 3 (M)entry 4
+			.			|
+			.			|
+		    .	   (U)entry 5
+			.         .
+			.         .
+		  merge . . . .
+	*/
+
+	memStore := NewMemStore()
+	credStore := generateTestCredStore()
+
+	root, _ := NewEntry(nil, *credStore, memStore)
+	root.Operation = OpBase
+	rootRef, _ := root.Save("")
+
+	entry1, _ := NewEntry(&Link{rootRef}, *credStore, memStore)
+	entry1.Operation = OpUpSert
+	rec1 := &Record{uuid.New(), []byte(`"1"`), false}
+	entry1Recs := &Records{Records: []Record{*rec1}, store: memStore}
+	entry1Diff := &EntryDiff{OpUpSert, *rec1}
+	entry1Snap, _ := entry1Recs.Snapshot(*credStore)
+	entry1.Snapshot = entry1Snap
+	entry1.EncryptFromJSON(entry1Diff)
+	entry1Ref, _ := entry1.Save("")
+
+	entry2, _ := NewEntry(&Link{rootRef}, *credStore, memStore)
+	entry2.Operation = OpUpSert
+	rec2 := &Record{uuid.New(), []byte(`"2"`), false}
+	entry2Recs := &Records{Records: []Record{*rec2}, store: memStore}
+	entry2Diff := &EntryDiff{OpUpSert, *rec2}
+	entry2Snap, _ := entry2Recs.Snapshot(*credStore)
+	entry2.Snapshot = entry2Snap
+	entry2.EncryptFromJSON(entry2Diff)
+	entry2.Save("")
+
+	entry3, _ := NewEntry(&Link{entry1Ref}, *credStore, memStore)
+	entry3.Operation = OpUpSert
+	rec3 := &Record{rec1.ID, []byte{}, true}
+	entry3Recs := &Records{Records: []Record{*rec3}, store: memStore}
+	entry3Diff := &EntryDiff{OpDel, *rec3}
+	entry3Snap, err := entry3Recs.Snapshot(*credStore)
+	if err != nil {
+		t.Fatal(err)
+	}
+	entry3.Snapshot = entry3Snap
+	entry3.EncryptFromJSON(entry3Diff)
+	entry3.Save("")
+
+	entry4, _, err := entry1.Merge(entry2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	entry4Ref, _ := entry4.Save("")
+
+	entry5, _ := NewEntry(&Link{entry4Ref}, *credStore, memStore)
+	entry5.Operation = OpUpSert
+	rec5 := &Record{uuid.New(), []byte(`"5"`), false}
+	entry5Recs := &Records{Records: []Record{*rec5}, store: memStore}
+	entry5Diff := &EntryDiff{OpUpSert, *rec5}
+	entry5Snap, _ := entry5Recs.Snapshot(*credStore)
+	entry5.Snapshot = entry5Snap
+	entry5.EncryptFromJSON(entry5Diff)
+	entry5.Save("")
+
+	merge, mRecs, err := entry3.Merge(entry5)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	expectedRecords := []Record{*rec2, *rec3, *rec5}
+
+	assert.EqualValues(t, expectedRecords, mRecs)
+	assert.Equal(t, OpMerge, merge.Operation)
 }
