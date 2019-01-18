@@ -253,7 +253,7 @@ func (e *Entry) Merge(sibling *Entry) (*Entry, []Record, error) {
 		return nil, nil, err
 	}
 
-	_, _, mapping, err := e.findCommonAncestor(sibling)
+	_, mapping, err := e.findCommonAncestor(sibling)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -375,24 +375,24 @@ type lcaMapping struct {
 	Depths    map[string]int
 }
 
-func (e *Entry) findCommonAncestor(sibling *Entry) (*Entry, *string, *lcaMapping, error) {
+func (e *Entry) findCommonAncestor(sibling *Entry) (*string, *lcaMapping, error) {
 	if len(e.Parent) == 0 {
-		return nil, nil, nil, nil
+		return nil, nil, nil
 	}
 
 	// Test 1 depth
 	eParents, err := e.Parents()
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, err
 	}
 	sParents, err := sibling.Parents()
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, err
 	}
-	for eTarget, eParent := range eParents {
+	for eTarget := range eParents {
 		for sTarget := range sParents {
 			if eTarget == sTarget {
-				return eParent, &eTarget, nil, nil
+				return &eTarget, nil, nil
 			}
 		}
 	}
@@ -400,11 +400,11 @@ func (e *Entry) findCommonAncestor(sibling *Entry) (*Entry, *string, *lcaMapping
 	//LCA
 	eRef, err := e.Save("")
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, err
 	}
 	sRef, err := sibling.Save("")
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, err
 	}
 	depth := map[string]int{}
 	depth[eRef] = 0
@@ -412,11 +412,11 @@ func (e *Entry) findCommonAncestor(sibling *Entry) (*Entry, *string, *lcaMapping
 
 	childrenE, depth, err := e.dfs(map[string]map[string]bool{}, depth, 0)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, err
 	}
 	childrenS, depth, err := sibling.dfs(map[string]map[string]bool{}, depth, 0)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, err
 	}
 
 	commons := map[string]int{}
@@ -441,15 +441,10 @@ func (e *Entry) findCommonAncestor(sibling *Entry) (*Entry, *string, *lcaMapping
 
 	//Can fast forward
 	if lca == sRef {
-		return sibling, &sRef, nil, nil
+		return &sRef, nil, nil
 	}
 
-	lcaNode, err := NewEntryFromStorage(e.dataStore, e.credStore, lca)
-	if err != nil {
-		return nil, nil, nil, err
-	}
-
-	return lcaNode, &lca, &lcaMapping{childrenE, childrenS, depth}, nil
+	return &lca, &lcaMapping{childrenE, childrenS, depth}, nil
 
 }
 

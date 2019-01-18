@@ -334,7 +334,7 @@ func TestFindDirectAncestor(t *testing.T) {
 	entry2, _ := NewEntry(&Link{rootRef}, *credStore, memStore)
 	entry2.Save("")
 
-	_, estRootRef, _, _ := entry2.findCommonAncestor(entry1)
+	estRootRef, _, _ := entry2.findCommonAncestor(entry1)
 
 	assert.Equal(t, rootRef, *estRootRef)
 }
@@ -369,7 +369,7 @@ func TestFind1JumpAncestor(t *testing.T) {
 	entry2, _ := NewEntry(&Link{rootRef}, credStore, memStore)
 	entry2.Save("")
 
-	_, estRootRef, _, _ := entry2.findCommonAncestor(entry3)
+	estRootRef, _, _ := entry2.findCommonAncestor(entry3)
 
 	if estRootRef == nil {
 		t.Fatal("No ancestor found, but should have been ", rootRef)
@@ -421,7 +421,7 @@ func TestFind2JumpAncestor(t *testing.T) {
 
 	t.Logf("\nroot: %s\n1: %s\n2: %s\n3: %s\n4: %s\n5: %s\n", rootRef, entry1Ref, entry2Ref, entry3Ref, entry4Ref, entry5Ref)
 
-	_, estRootRef, mappings, _ := entry3.findCommonAncestor(entry5)
+	estRootRef, mappings, _ := entry3.findCommonAncestor(entry5)
 
 	if estRootRef == nil {
 		t.Fatal("No ancestor found, but should have been ", rootRef)
@@ -468,7 +468,7 @@ func TestComplexAncestor(t *testing.T) {
 
 	t.Logf("\nroot: %s\n1: %s\n2: %s\n3: %s\n4: %s\n m1+2: %s\n5: %s\n6: %s\nm5+6: %s\n", rootRef, entry1Ref, entry2Ref, entry3Ref, entry4Ref, merge1_2Ref, entry5Ref, entry6Ref, merge5_6Ref)
 
-	_, estRootRef, _, _ := merge5_6.findCommonAncestor(entry3)
+	estRootRef, _, _ := merge5_6.findCommonAncestor(entry3)
 
 	assert.Equal(t, entry1Ref, *estRootRef)
 
@@ -508,7 +508,7 @@ func TestFastForwardAncestor(t *testing.T) {
 	entry3, _ := NewEntry(&Link{entry2Ref}, credStore, memStore)
 	entry3.Save("")
 
-	_, estRootRef, _, _ := entry3.findCommonAncestor(entry1)
+	estRootRef, _, _ := entry3.findCommonAncestor(entry1)
 
 	assert.Equal(t, entry1Ref, *estRootRef)
 }
