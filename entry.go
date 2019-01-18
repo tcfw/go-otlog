@@ -6,7 +6,6 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"time"
 
 	"github.com/google/uuid"
@@ -249,12 +248,12 @@ func (e *Entry) Merge(sibling *Entry) (*Entry, []Record, error) {
 	if err != nil {
 		return nil, nil, err
 	}
-	pRef, err := sibling.Save("")
+	sRef, err := sibling.Save("")
 	if err != nil {
 		return nil, nil, err
 	}
 
-	commonAncestor, _, mapping, err := e.findCommonAncestor(sibling)
+	_, _, mapping, err := e.findCommonAncestor(sibling)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -298,12 +297,42 @@ func (e *Entry) Merge(sibling *Entry) (*Entry, []Record, error) {
 	} else {
 		//Multi diff path
 
-		// baseRef := commonAncestor.Snapshot.Target
-		// leftRef := e.Snapshot.Target
-		// rightRef := sibling.Snapshot.Target
+		uncommon := map[string]*Entry{sRef: sibling}
 
-		//3wMerge(baseRef,leftRef,rightRef)
-		fmt.Printf("%v\n", commonAncestor.Snapshot.Target)
+		for ref := range mapping.ChildrenB {
+			if _, ok := mapping.ChildrenA[ref]; !ok {
+				entry, err := NewEntryFromStorage(e.dataStore, e.credStore, ref)
+				if err != nil {
+					return nil, nil, err
+				}
+				uncommon[ref] = entry
+			}
+		}
+
+		playBackUnCommon := []*Entry{}
+		for _, entry := range uncommon {
+			if len(playBackUnCommon) == 0 || playBackUnCommon[len(playBackUnCommon)-1].Time.Before(entry.Time) {
+				playBackUnCommon = append(playBackUnCommon, entry)
+			} else {
+				playBackUnCommon = append([]*Entry{entry}, playBackUnCommon...)
+			}
+		}
+
+		for _, entry := range playBackUnCommon {
+			if entry.Operation == OpMerge {
+				continue
+			}
+			diff, err := entry.DataToStruct(&EntryDiff{})
+			if err != nil {
+				return nil, nil, err
+			}
+			diffTyped := diff.(*EntryDiff)
+			records.Records, err = e.applyDiff(*diffTyped, records.Records)
+			if err != nil {
+				return nil, nil, err
+			}
+			mergedRecords = records.Records
+		}
 	}
 
 	snapshotRef, err := NewSnapshot(e.credStore, records, e.dataStore)
@@ -313,24 +342,28 @@ func (e *Entry) Merge(sibling *Entry) (*Entry, []Record, error) {
 
 	mergeEntry.Operation = OpMerge
 	mergeEntry.Snapshot = snapshotRef
-	mergeEntry.Parent = []*Link{{eRef}, {pRef}}
+	mergeEntry.Parent = []*Link{{eRef}, {sRef}}
 
 	return mergeEntry, mergedRecords, nil
 }
 
 func (e *Entry) applyDiff(diff EntryDiff, records []Record) ([]Record, error) {
+	index := -1
+	for i, rec := range records {
+		if rec.ID == diff.Record.ID {
+			index = i
+			break
+		}
+	}
 	switch diff.Op {
 	case OpUpSert:
-		return append(records, diff.Record), nil
-	case OpDel:
-		index := -1
-		for i, rec := range records {
-			if rec.ID == diff.Record.ID {
-				index = i
-				break
-			}
+		if index > 0 {
+			records[index] = diff.Record
+		} else {
+			return append(records, diff.Record), nil
 		}
-		records[index] = Record{records[index].ID, []byte{}, true}
+	case OpDel:
+		records[index] = Record{records[index].ID, nil, true}
 		return records[:len(records)-1], nil
 	}
 	return []Record{}, nil

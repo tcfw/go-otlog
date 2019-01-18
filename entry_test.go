@@ -451,7 +451,7 @@ func TestComplexAncestor(t *testing.T) {
 	entry4Ref, _ := entry4.Save("")
 
 	merge1_2, _ := NewEntry(nil, credStore, memStore)
-	merge1_2.Parent = []*Link{&Link{entry1Ref}, &Link{entry2Ref}}
+	merge1_2.Parent = []*Link{{entry1Ref}, {entry2Ref}}
 	merge1_2.Operation = OpMerge
 	merge1_2Ref, _ := merge1_2.Save("")
 
@@ -462,7 +462,7 @@ func TestComplexAncestor(t *testing.T) {
 	entry6Ref, _ := entry6.Save("")
 
 	merge5_6, _ := NewEntry(nil, credStore, memStore)
-	merge5_6.Parent = []*Link{&Link{entry5Ref}, &Link{entry6Ref}}
+	merge5_6.Parent = []*Link{{entry5Ref}, {entry6Ref}}
 	merge5_6.Operation = OpMerge
 	merge5_6Ref, _ := merge5_6.Save("")
 
@@ -628,8 +628,8 @@ func Test2DeepMerge(t *testing.T) {
 	entry2.Save("")
 
 	entry3, _ := NewEntry(&Link{entry1Ref}, *credStore, memStore)
-	entry3.Operation = OpUpSert
-	rec3 := &Record{rec1.ID, []byte{}, true}
+	entry3.Operation = OpDel
+	rec3 := &Record{rec1.ID, nil, true}
 	entry3Recs := &Records{Records: []Record{*rec3}, store: memStore}
 	entry3Diff := &EntryDiff{OpDel, *rec3}
 	entry3Snap, err := entry3Recs.Snapshot(*credStore)
@@ -661,8 +661,10 @@ func Test2DeepMerge(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	expectedRecords := []Record{*rec2, *rec3, *rec5}
+	expectedRecords := []Record{*rec3, *rec2, *rec5}
 
-	assert.EqualValues(t, expectedRecords, mRecs)
+	for i := range expectedRecords {
+		assert.EqualValues(t, expectedRecords[i], mRecs[i])
+	}
 	assert.Equal(t, OpMerge, merge.Operation)
 }
