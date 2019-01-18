@@ -380,20 +380,20 @@ func TestFind1JumpAncestor(t *testing.T) {
 
 func TestFind2JumpAncestor(t *testing.T) {
 	/*
-		   	Test:
+		Test:
 
-		   		root
-		   		  /\
-		   	     /  \
-		    entry 1  entry 2
-		   	 |	   \	|
-		   	 |		 \	|
-			entry 3  entry 4
-						|
-						|
-					 entry 5
+			root
+		     /\
+			/  \
+		entry 1  entry 2
+		 |	   \	|
+		 |		 \	|
+		entry 3  entry 4
+					|
+					|
+					entry 5
 
-		   	LCA(entry3, entry5) = entry1
+		LCA(entry3, entry5) = entry1
 
 	*/
 	memStore := NewMemStore()
@@ -428,6 +428,88 @@ func TestFind2JumpAncestor(t *testing.T) {
 	}
 
 	assert.NotNil(t, mappings)
+	assert.Equal(t, entry1Ref, *estRootRef)
+}
+
+func TestComplexAncestor(t *testing.T) {
+	memStore := NewMemStore()
+	credStore := *generateTestCredStore()
+
+	root, _ := NewEntry(nil, credStore, memStore)
+	rootRef, _ := root.Save("")
+
+	entry1, _ := NewEntry(&Link{rootRef}, credStore, memStore)
+	entry1Ref, _ := entry1.Save("")
+
+	entry2, _ := NewEntry(&Link{rootRef}, credStore, memStore)
+	entry2Ref, _ := entry2.Save("")
+
+	entry3, _ := NewEntry(&Link{entry1Ref}, credStore, memStore)
+	entry3Ref, _ := entry3.Save("")
+
+	entry4, _ := NewEntry(&Link{entry2Ref}, credStore, memStore)
+	entry4Ref, _ := entry4.Save("")
+
+	merge1_2, _ := NewEntry(nil, credStore, memStore)
+	merge1_2.Parent = []*Link{&Link{entry1Ref}, &Link{entry2Ref}}
+	merge1_2.Operation = OpMerge
+	merge1_2Ref, _ := merge1_2.Save("")
+
+	entry5, _ := NewEntry(&Link{merge1_2Ref}, credStore, memStore)
+	entry5Ref, _ := entry5.Save("")
+
+	entry6, _ := NewEntry(&Link{entry4Ref}, credStore, memStore)
+	entry6Ref, _ := entry6.Save("")
+
+	merge5_6, _ := NewEntry(nil, credStore, memStore)
+	merge5_6.Parent = []*Link{&Link{entry5Ref}, &Link{entry6Ref}}
+	merge5_6.Operation = OpMerge
+	merge5_6Ref, _ := merge5_6.Save("")
+
+	t.Logf("\nroot: %s\n1: %s\n2: %s\n3: %s\n4: %s\n m1+2: %s\n5: %s\n6: %s\nm5+6: %s\n", rootRef, entry1Ref, entry2Ref, entry3Ref, entry4Ref, merge1_2Ref, entry5Ref, entry6Ref, merge5_6Ref)
+
+	_, estRootRef, _, _ := merge5_6.findCommonAncestor(entry3)
+
+	assert.Equal(t, entry1Ref, *estRootRef)
+
+}
+
+func TestFastForwardAncestor(t *testing.T) {
+	/*
+		Test:
+
+		root
+		 |
+		 |
+		entry 1
+		 |
+		 |
+		entry 2
+		 |
+		 |
+		entry 3
+
+		LCA(entry1, entry3) = entry1 ~> fast forward
+
+	*/
+
+	memStore := NewMemStore()
+	credStore := *generateTestCredStore()
+
+	root, _ := NewEntry(nil, credStore, memStore)
+	rootRef, _ := root.Save("")
+
+	entry1, _ := NewEntry(&Link{rootRef}, credStore, memStore)
+	entry1Ref, _ := entry1.Save("")
+
+	entry2, _ := NewEntry(&Link{entry1Ref}, credStore, memStore)
+	entry2Ref, _ := entry2.Save("")
+
+	entry3, _ := NewEntry(&Link{entry2Ref}, credStore, memStore)
+	entry3.Save("")
+
+	_, estRootRef, _, _ := entry3.findCommonAncestor(entry1)
+
 	assert.Equal(t, entry1Ref, *estRootRef)
 }
 
@@ -499,10 +581,10 @@ func TestSimpleMerge(t *testing.T) {
 func Test2DeepMerge(t *testing.T) {
 	/*
 		Test:
-
-			    root
-			    / \
-			   /   \
+		   (B)root
+		    |    \
+			|      \
+			|        \
 		(U)entry 1  (U)entry 2
 			|    \	    |
 			|	  \	    |
@@ -514,6 +596,8 @@ func Test2DeepMerge(t *testing.T) {
 			.         .
 			.         .
 		  merge . . . .
+
+		  merge entry 5 => entry 3 ~ base:entry1 ~ diff: 2->3->5
 	*/
 
 	memStore := NewMemStore()

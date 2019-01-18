@@ -365,7 +365,19 @@ func (e *Entry) findCommonAncestor(sibling *Entry) (*Entry, *string, *lcaMapping
 	}
 
 	//LCA
-	childrenE, depth, err := e.dfs(map[string]map[string]bool{}, map[string]int{}, 0)
+	eRef, err := e.Save("")
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	sRef, err := sibling.Save("")
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	depth := map[string]int{}
+	depth[eRef] = 0
+	depth[sRef] = 0
+
+	childrenE, depth, err := e.dfs(map[string]map[string]bool{}, depth, 0)
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -379,7 +391,7 @@ func (e *Entry) findCommonAncestor(sibling *Entry) (*Entry, *string, *lcaMapping
 	for ref, nodeDepth := range depth {
 		_, okE := childrenE[ref]
 		_, okS := childrenS[ref]
-		if okE && okS {
+		if (okE && okS) || (okS && ref == eRef) || (okE && ref == sRef) {
 			commons[ref] = nodeDepth
 		}
 	}
@@ -390,7 +402,13 @@ func (e *Entry) findCommonAncestor(sibling *Entry) (*Entry, *string, *lcaMapping
 	for ref, nDepth := range commons {
 		if nDepth < curDepth {
 			lca = ref
+			curDepth = nDepth
 		}
+	}
+
+	//Can fast forward
+	if lca == sRef {
+		return sibling, &sRef, nil, nil
 	}
 
 	lcaNode, err := NewEntryFromStorage(e.dataStore, e.credStore, lca)
