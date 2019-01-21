@@ -276,6 +276,32 @@ func (e *Entry) Merge(sibling *Entry) (*Entry, []Record, error) {
 		return nil, nil, err
 	}
 
+	mergedRecords, err := e.difference(mapping, sibling, records)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	records.Records = mergedRecords
+
+	snapshotRef, err := NewSnapshot(e.credStore, records, e.dataStore)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	mergeEntry.Operation = OpMerge
+	mergeEntry.Snapshot = snapshotRef
+	mergeEntry.Parent = []*Link{{eRef}, {sRef}}
+
+	return mergeEntry, mergedRecords, nil
+}
+
+func (e *Entry) difference(mapping *lcaMapping, sibling *Entry, records *Records) ([]Record, error) {
+
+	sRef, err := sibling.Save("")
+	if err != nil {
+		return nil, err
+	}
+
 	mergedRecords := []Record{}
 
 	if mapping == nil {
@@ -285,13 +311,13 @@ func (e *Entry) Merge(sibling *Entry) (*Entry, []Record, error) {
 
 		sibDiff, err := sibling.DataToStruct(&EntryDiff{})
 		if err != nil {
-			return nil, nil, err
+			return nil, err
 		}
 		sibDiffT := sibDiff.(*EntryDiff)
 
 		records.Records, err = e.applyDiff(*sibDiffT, records.Records)
 		if err != nil {
-			return nil, nil, err
+			return nil, err
 		}
 		mergedRecords = records.Records
 	} else {
@@ -303,7 +329,7 @@ func (e *Entry) Merge(sibling *Entry) (*Entry, []Record, error) {
 			if _, ok := mapping.ChildrenA[ref]; !ok {
 				entry, err := NewEntryFromStorage(e.dataStore, e.credStore, ref)
 				if err != nil {
-					return nil, nil, err
+					return nil, err
 				}
 				uncommon[ref] = entry
 			}
@@ -324,27 +350,17 @@ func (e *Entry) Merge(sibling *Entry) (*Entry, []Record, error) {
 			}
 			diff, err := entry.DataToStruct(&EntryDiff{})
 			if err != nil {
-				return nil, nil, err
+				return nil, err
 			}
 			diffTyped := diff.(*EntryDiff)
 			records.Records, err = e.applyDiff(*diffTyped, records.Records)
 			if err != nil {
-				return nil, nil, err
+				return nil, err
 			}
 			mergedRecords = records.Records
 		}
 	}
-
-	snapshotRef, err := NewSnapshot(e.credStore, records, e.dataStore)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	mergeEntry.Operation = OpMerge
-	mergeEntry.Snapshot = snapshotRef
-	mergeEntry.Parent = []*Link{{eRef}, {sRef}}
-
-	return mergeEntry, mergedRecords, nil
+	return mergedRecords, nil
 }
 
 func (e *Entry) applyDiff(diff EntryDiff, records []Record) ([]Record, error) {
