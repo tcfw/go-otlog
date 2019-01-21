@@ -386,10 +386,12 @@ func (e *Entry) applyDiff(diff EntryDiff, records []Record) ([]Record, error) {
 }
 
 type lcaMapping struct {
-	ChildrenA map[string]map[string]bool
-	ChildrenB map[string]map[string]bool
+	ChildrenA refTree
+	ChildrenB refTree
 	Depths    map[string]int
 }
+
+type refTree map[string]map[string]bool
 
 func (e *Entry) findCommonAncestor(sibling *Entry) (*string, *lcaMapping, error) {
 	if len(e.Parent) == 0 {
@@ -426,24 +428,16 @@ func (e *Entry) findCommonAncestor(sibling *Entry) (*string, *lcaMapping, error)
 	depth[eRef] = 0
 	depth[sRef] = 0
 
-	childrenE, depth, err := e.dfs(map[string]map[string]bool{}, depth, 0)
+	childrenE, depth, err := e.dfs(refTree{}, depth, 0)
 	if err != nil {
 		return nil, nil, err
 	}
-	childrenS, depth, err := sibling.dfs(map[string]map[string]bool{}, depth, 0)
+	childrenS, depth, err := sibling.dfs(refTree{}, depth, 0)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	commons := map[string]int{}
-
-	for ref, nodeDepth := range depth {
-		_, okE := childrenE[ref]
-		_, okS := childrenS[ref]
-		if (okE && okS) || (okS && ref == eRef) || (okE && ref == sRef) {
-			commons[ref] = nodeDepth
-		}
-	}
+	commons := findCommon(depth, childrenE, childrenS, eRef, sRef)
 
 	var lca string
 
@@ -461,13 +455,26 @@ func (e *Entry) findCommonAncestor(sibling *Entry) (*string, *lcaMapping, error)
 	}
 
 	return &lca, &lcaMapping{childrenE, childrenS, depth}, nil
+}
 
+func findCommon(depth map[string]int, a refTree, b refTree, eRef string, sRef string) map[string]int {
+	commons := map[string]int{}
+
+	for ref, nodeDepth := range depth {
+		_, okE := a[ref]
+		_, okS := b[ref]
+		if (okE && okS) || (okS && ref == eRef) || (okE && ref == sRef) {
+			commons[ref] = nodeDepth
+		}
+	}
+
+	return commons
 }
 
 //MAXDEPTH is the limit of the depth of the search
 const MAXDEPTH = 100000
 
-func (e *Entry) dfs(dfsMap map[string]map[string]bool, depth map[string]int, curDepth int) (map[string]map[string]bool, map[string]int, error) {
+func (e *Entry) dfs(dfsMap refTree, depth map[string]int, curDepth int) (refTree, map[string]int, error) {
 	ref, _ := e.Save("")
 	parents, err := e.Parents()
 	if err != nil {
